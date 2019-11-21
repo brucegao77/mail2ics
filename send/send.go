@@ -77,8 +77,10 @@ func SendEmail(msg *clean.Message) error {
 func toIcs(msg *clean.Message, filename string) error {
 	activity := fmt.Sprintf(
 		"BEGIN:VCALENDAR\n"+
-			"VERSION:2.0\n"+
 			"PRODID:%s\n"+
+			"VERSION:2.0\n"+
+			"CALSCALE:GREGORIAN\n"+
+			"METHOD:PUBLISH\n"+
 			"BEGIN:VEVENT\n"+
 			"DTSTART:%s\n"+
 			"SUMMARY:%s\n"+

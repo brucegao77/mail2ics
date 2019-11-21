@@ -6,6 +6,7 @@ import (
 	"mail2ics/clean"
 	"mail2ics/recive"
 	"mail2ics/send"
+	"time"
 )
 
 func main() {
@@ -18,8 +19,8 @@ func main() {
 			if err := recive.CheckMail(&ContentChannel); err != nil {
 				log.Fatal(err)
 			}
-			//time.Sleep(time.Minute)
-			break
+
+			time.Sleep(time.Minute)
 		}
 	}()
 

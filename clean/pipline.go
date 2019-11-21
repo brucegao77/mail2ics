@@ -57,16 +57,18 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 
 		msg.Subject = fmt.Sprintf("列车行程：%s", info[3])
 		if t, err := parseTime(info[2], "2006年01月02日15:04"); err != nil {
-			msg.StartDT = t
+			return err
+		} else {
+			msg.StartDT = t + "Z"
 		}
 		msg.Location = strings.Split(info[3], "-")[0]
 		msg.Detail = fmt.Sprintf(
-			"订单号：%s\n"+
-				"乘客：%s\n"+
-				"车次：%s\n"+
-				"检票口：%s\n"+
-				"座位号：%s\n"+
-				"席别：%s\n"+
+			"订单号：%s\\n"+
+				"乘客：%s\\n"+
+				"车次：%s\\n"+
+				"检票口：%s\\n"+
+				"座位号：%s\\n"+
+				"席别：%s\\n"+
 				"票价：%s", strings.ReplaceAll(num, " ", ""),
 			info[1], info[4], check, info[5], info[6], info[7])
 		*mc <- *msg
@@ -96,6 +98,10 @@ func parseTime(t string, form string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Don't know why, when add to google calendar, time will +8 hours
+	// so -8 hours here
+	h, _ := time.ParseDuration("-1h")
+	t2 := t1.Add(8 * h)
 
-	return t1.Format("20060102T150405"), err
+	return t2.Format("20060102T150405"), err
 }
