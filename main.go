@@ -1,34 +1,47 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"mail2ics/clean"
 	"mail2ics/recive"
-	"time"
+	"mail2ics/send"
 )
 
 func main() {
-	ContentChannle := make(chan recive.Mail, 10)
+	ContentChannel := make(chan recive.Mail, 10)
+	MessageChannel := make(chan clean.Message, 10)
 
 	// Check mail every minute
 	go func() {
 		for {
-			err := recive.CheckMail(&ContentChannle)
-			if err != nil {
+			if err := recive.CheckMail(&ContentChannel); err != nil {
 				log.Fatal(err)
 			}
-			time.Sleep(time.Minute)
+			//time.Sleep(time.Minute)
+			break
 		}
 	}()
 
 	// Handle the mail body
-	for m := range ContentChannle {
-		log.Println("Handling mail: ", m.Subject)
-		var msg clean.Message
+	go func() {
+		for c := range ContentChannel {
+			log.Println("Handling: ", c.Subject)
+			var msg clean.Message
 
-		clean.Pipline(&m, &msg)
-		//send.SendEmail(&msg)
+			if err := clean.Pipline(&c, &msg, &MessageChannel); err != nil {
+				log.Fatal(err)
+			}
 
-		log.Println("Waiting for email")
+			log.Println("Message handled!")
+		}
+	}()
+
+	// Send email
+	for m := range MessageChannel {
+		if err := send.SendEmail(&m); err != nil {
+			log.Fatal(err)
+		}
+		log.Println(fmt.Sprintf("An activity has send to %s!", m.From))
 	}
 }

@@ -4,13 +4,13 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/mail"
-	"io"
 	"io/ioutil"
 	"log"
 	"mail2ics/config"
 )
 
 type Mail struct {
+	User    string
 	From    string
 	Subject string
 	Content string
@@ -56,10 +56,6 @@ func CheckMail(cc *chan Mail) error {
 		done <- c.Fetch(seqSet, items, messages)
 	}()
 
-	if err := <-done; err != nil {
-		return err
-	}
-
 	for msg := range messages {
 		r := msg.GetBody(&section)
 		if r == nil {
@@ -79,25 +75,21 @@ func CheckMail(cc *chan Mail) error {
 			if err != nil {
 				return err
 			}
-			// Process each message's
-			content := ""
-			for {
-				p, err := mr.NextPart()
-				if err == io.EOF {
-					break
-				} else if err != nil {
-					return err
-				}
 
-				// This is the message's text (can be plain-text or HTML)
-				b, _ := ioutil.ReadAll(p.Body)
-				content += string(b)
+			p, err := mr.NextPart()
+			if err != nil {
+				return err
 			}
-			m := Mail{From: from[0].Address, Subject: subject, Content: content}
+			// This is the message's text (can be plain-text or HTML)
+			b, _ := ioutil.ReadAll(p.Body)
+			m := Mail{User: config.Bruce.Name, From: from[0].Address, Subject: subject, Content: string(b)}
 			*cc <- m
 		}
 	}
 
+	if err := <-done; err != nil {
+		return err
+	}
 	log.Println("Mail recieved!")
 
 	return nil
