@@ -22,10 +22,10 @@ func SendEmail(msg *clean.Message) error {
 	}
 
 	to := msg.From
-	host := config.Send.Addr
+	host := config.Sender.Addr
 	port := 465
-	from := config.Send.Username
-	password := config.Send.Password
+	from := config.Sender.Email
+	password := config.Sender.Password
 	//sendTo := strings.Split(to, ";")
 	subject := msg.Subject
 	boundary := "boundary" // boundary 用于分割邮件内容，可自定义. 注意它的开始和结束格式

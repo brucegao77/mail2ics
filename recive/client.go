@@ -19,7 +19,7 @@ type Mail struct {
 // Reference from https://github.com/emersion/go-imap/wiki/Fetching-messages
 func CheckMail(cc *chan Mail) error {
 	// Connect to server
-	c, err := client.DialTLS(config.Bruce.Addr, nil)
+	c, err := client.DialTLS(config.Reciver.Addr, nil)
 	if err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func CheckMail(cc *chan Mail) error {
 	defer c.Logout()
 
 	// Login
-	if err := c.Login(config.Bruce.Username, config.Bruce.Password); err != nil {
+	if err := c.Login(config.Reciver.Email, config.Reciver.Password); err != nil {
 		return err
 	}
 
@@ -85,7 +85,7 @@ func CheckMail(cc *chan Mail) error {
 			}
 			// This is the message's text (can be plain-text or HTML)
 			b, _ := ioutil.ReadAll(p.Body)
-			m := Mail{User: config.Bruce.Name, From: from[0].Address, Subject: subject, Content: string(b)}
+			m := Mail{User: config.Reciver.Name, From: from[0].Address, Subject: subject, Content: string(b)}
 			*cc <- m
 		}
 	}
