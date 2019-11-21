@@ -18,14 +18,11 @@ type Mail struct {
 
 // Reference from https://github.com/emersion/go-imap/wiki/Fetching-messages
 func CheckMail(cc *chan Mail) error {
-	log.Println("Connecting to server...")
-
 	// Connect to server
 	c, err := client.DialTLS(config.Bruce.Addr, nil)
 	if err != nil {
 		return err
 	}
-	log.Println("Connected")
 
 	// Don't forget to logout
 	defer c.Logout()
@@ -34,8 +31,8 @@ func CheckMail(cc *chan Mail) error {
 	if err := c.Login(config.Bruce.Username, config.Bruce.Password); err != nil {
 		return err
 	}
-	log.Println("Logged in")
 
+	log.Println("Checking email")
 	// Select INBOX
 	mbox, err := c.Select("INBOX", false)
 	if err != nil {
@@ -48,7 +45,8 @@ func CheckMail(cc *chan Mail) error {
 
 	// Get the whole message body
 	var section imap.BodySectionName
-	items := []imap.FetchItem{section.FetchItem()}
+	items := []imap.FetchItem{imap.FetchFlags}
+	items = append(items, section.FetchItem())
 	messages := make(chan *imap.Message, 10)
 
 	done := make(chan error, 1)
@@ -57,6 +55,11 @@ func CheckMail(cc *chan Mail) error {
 	}()
 
 	for msg := range messages {
+		// No flags means this email is unseen
+		if len(msg.Flags) != 0 {
+			continue
+		}
+
 		r := msg.GetBody(&section)
 		if r == nil {
 			log.Fatal("Server didn't returned message body")
@@ -90,7 +93,6 @@ func CheckMail(cc *chan Mail) error {
 	if err := <-done; err != nil {
 		return err
 	}
-	log.Println("Mail recieved!")
 
 	return nil
 }

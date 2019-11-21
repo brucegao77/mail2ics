@@ -21,6 +21,7 @@ func main() {
 			}
 
 			time.Sleep(time.Minute)
+			//break
 		}
 	}()
 
@@ -33,8 +34,6 @@ func main() {
 			if err := clean.Pipline(&c, &msg, &MessageChannel); err != nil {
 				log.Fatal(err)
 			}
-
-			log.Println("Message handled!")
 		}
 	}()
 
@@ -43,6 +42,7 @@ func main() {
 		if err := send.SendEmail(&m); err != nil {
 			log.Fatal(err)
 		}
+
 		log.Println(fmt.Sprintf("An activity has send to %s!", m.From))
 	}
 }
