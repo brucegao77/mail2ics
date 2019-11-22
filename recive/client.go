@@ -86,6 +86,7 @@ func CheckMail(cc *chan Mail) error {
 			// This is the message's text (can be plain-text or HTML)
 			b, _ := ioutil.ReadAll(p.Body)
 			m := Mail{User: config.Reciver.Name, From: from[0].Address, Subject: subject, Content: string(b)}
+			log.Println("sending")
 			*cc <- m
 		}
 	}
