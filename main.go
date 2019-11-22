@@ -6,7 +6,6 @@ import (
 	"mail2ics/clean"
 	"mail2ics/recive"
 	"mail2ics/send"
-	"time"
 )
 
 func main() {
@@ -15,13 +14,8 @@ func main() {
 
 	// Check mail every minute
 	go func() {
-		for {
-			if err := recive.CheckMail(&ContentChannel); err != nil {
-				log.Fatal(err)
-			}
-
-			time.Sleep(time.Minute)
-			//break
+		if err := recive.CheckMail(&ContentChannel); err != nil {
+			log.Fatal(err)
 		}
 	}()
 
