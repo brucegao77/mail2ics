@@ -6,7 +6,7 @@ import (
 	"log"
 )
 
-type User struct {
+type Account struct {
 	Name     string `json:"name"`
 	Addr     string `json:"addr"`
 	Email    string `json:"email"`
@@ -14,12 +14,13 @@ type User struct {
 }
 
 var (
-	Reciver User
-	Sender  User
+	Reciver Account
+	Sender  Account
+	User    Account
 )
 
 func init() {
-	a := make(map[string]User)
+	a := make(map[string]Account)
 
 	data, err := readFile("config.json")
 	if err != nil {
@@ -33,6 +34,7 @@ func init() {
 
 	Reciver = a["reciver"]
 	Sender = a["sender"]
+	User = a["user"]
 }
 
 func readFile(filename string) ([]byte, error) {
