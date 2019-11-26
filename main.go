@@ -10,13 +10,27 @@ import (
 )
 
 func main() {
-	ContentChannel := make(chan recive.Mail, 10)
-	MessageChannel := make(chan clean.Message, 10)
+	messageChannel := make(chan clean.Message, 10)
+
+	go mail(&messageChannel)
+
+	// Send email
+	for m := range messageChannel {
+		if err := send.SendEmail(&m); err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println(fmt.Sprintf("An activity has send to %s!", m.From))
+	}
+}
+
+func mail(messageChannel *chan clean.Message) {
+	contentChannel := make(chan recive.Mail, 10)
 
 	// Check mail every hour
 	go func() {
 		for {
-			if err := recive.CheckMail(&ContentChannel); err != nil {
+			if err := recive.CheckMail(&contentChannel); err != nil {
 				log.Fatal(err)
 			}
 
@@ -25,23 +39,13 @@ func main() {
 	}()
 
 	// Handle the mail body
-	go func() {
-		for c := range ContentChannel {
-			log.Println("Handling: ", c.Subject)
-			var msg clean.Message
+	for c := range contentChannel {
+		log.Println("Handling: ", c.Subject)
+		var msg clean.Message
 
-			if err := clean.Pipline(&c, &msg, &MessageChannel); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}()
-
-	// Send email
-	for m := range MessageChannel {
-		if err := send.SendEmail(&m); err != nil {
+		if err := clean.Pipline(&c, &msg, messageChannel); err != nil {
 			log.Fatal(err)
 		}
-
-		log.Println(fmt.Sprintf("An activity has send to %s!", m.From))
 	}
+
 }

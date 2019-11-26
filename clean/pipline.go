@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"mail2ics/recive"
+	"math/rand"
 	"regexp"
 	"strings"
 	"time"
@@ -12,14 +13,28 @@ import (
 type Message struct {
 	From     string
 	Subject  string
+	Events   []Event
+	Filename string
+	Cal      string
+}
+
+type Event struct {
 	StartDT  string
+	Summary  string
 	Location string
 	Detail   string
+	Uid      string
 }
 
 func (msg *Message) preClean(m *recive.Mail) {
+	events := make([]Event, 1)
+	msg.Events = events
+
 	msg.From = m.From
 	msg.Subject = m.Subject
+	msg.Filename = "activity.ics"
+	msg.Cal = "行程"
+	msg.Events[0].Summary = m.Subject
 }
 
 func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
@@ -59,10 +74,10 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 		if t, err := parseTime(info[2], "2006年01月02日15:04"); err != nil {
 			return err
 		} else {
-			msg.StartDT = t + "Z"
+			msg.Events[0].StartDT = t + "Z"
 		}
-		msg.Location = strings.Split(info[3], "-")[0]
-		msg.Detail = fmt.Sprintf(
+		msg.Events[0].Location = strings.Split(info[3], "-")[0]
+		msg.Events[0].Detail = fmt.Sprintf(
 			"订单号：%s\\n"+
 				"乘客：%s\\n"+
 				"车次：%s\\n"+
@@ -71,6 +86,7 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 				"席别：%s\\n"+
 				"票价：%s", strings.ReplaceAll(num, " ", ""),
 			info[1], info[4], check, info[5], info[6], info[7])
+		msg.Events[0].Uid = fmt.Sprintf("XC"+"%d", time.Now().Unix()+int64(rand.Intn(999999)))
 		*mc <- *msg
 		count++
 	}

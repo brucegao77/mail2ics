@@ -8,16 +8,15 @@ import (
 	"io/ioutil"
 	"mail2ics/clean"
 	"mail2ics/config"
+	"mail2ics/toics"
 	"net"
 	"net/smtp"
-	"os"
 )
 
 // refernce from https://blog.csdn.net/xcl168/article/details/51340272
 // and https://help.aliyun.com/document_detail/29457.html?spm=a2c4g.11186623.6.645.10001f23jBAnkR
 func SendEmail(msg *clean.Message) error {
-	attaFile := "activity.ics"
-	if err := toIcs(msg, attaFile); err != nil {
+	if err := toics.ToIcs(msg); err != nil {
 		return err
 	}
 
@@ -50,9 +49,9 @@ func SendEmail(msg *clean.Message) error {
 	mime.WriteString("Content-Type: application/octet-stream\n")
 	mime.WriteString("Content-Description: ics formate attachment\n")
 	mime.WriteString("Content-Transfer-Encoding: base64\n")
-	mime.WriteString("Content-Disposition: attachment; filename=\"" + attaFile + "\"\n\n")
+	mime.WriteString("Content-Disposition: attachment; filename=\"" + msg.Filename + "\"\n\n")
 	// 读取并编码文件内容
-	attaData, err := ioutil.ReadFile(attaFile)
+	attaData, err := ioutil.ReadFile(msg.Filename)
 	if err != nil {
 		return err
 	}
@@ -68,43 +67,6 @@ func SendEmail(msg *clean.Message) error {
 	if err = SendMailUsingTLS(
 		fmt.Sprintf("%s:%d", host, port),
 		auth, from, []string{to}, mime.Bytes()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func toIcs(msg *clean.Message, filename string) error {
-	activity := fmt.Sprintf(
-		"BEGIN:VCALENDAR\n"+
-			"PRODID:%s\n"+
-			"VERSION:2.0\n"+
-			"CALSCALE:GREGORIAN\n"+
-			"METHOD:PUBLISH\n"+
-			"BEGIN:VEVENT\n"+
-			"DTSTART:%s\n"+
-			"SUMMARY:%s\n"+
-			"DESCRIPTION:%s\n"+
-			"LOCATION:%s\n"+
-			"END:VEVENT\n"+
-			"END:VCALENDAR\n", msg.From, msg.StartDT, msg.Subject, msg.Detail, msg.Location)
-
-	if err := toFile(filename, activity); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func toFile(filename string, data string) error {
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(data)
-	if err != nil {
 		return err
 	}
 
