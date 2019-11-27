@@ -9,7 +9,7 @@ import (
 func ToIcs(msg *clean.Message) error {
 	var eventsStr string
 
-	combineEvent(&msg.Events, eventsStr)
+	combineEvent(&msg.Events, &eventsStr)
 	calendar := fmt.Sprintf(
 		"BEGIN:VCALENDAR\n"+
 			"PRODID:%s\n"+
@@ -28,7 +28,7 @@ func ToIcs(msg *clean.Message) error {
 	return nil
 }
 
-func combineEvent(events *[]clean.Event, eventsStr string) {
+func combineEvent(events *[]clean.Event, eventsStr *string) {
 	for _, e := range *events {
 		event := fmt.Sprintf(
 			"BEGIN:VEVENT\n"+
@@ -37,14 +37,9 @@ func combineEvent(events *[]clean.Event, eventsStr string) {
 				"SUMMARY:%s\n"+
 				"DESCRIPTION:%s\n"+
 				"LOCATION:%s\n"+
-				"BEGIN:VALARM"+
-				"ACTION:DISPLAY"+
-				"DESCRIPTION:This is an event reminder"+
-				"TRIGGER:-P0DT1H0M0S"+
-				"END:VALARM"+
 				"END:VEVENT\n", e.StartDT, e.Uid, e.Summary, e.Detail, e.Location)
 
-		eventsStr += event
+		*eventsStr += event
 	}
 }
 

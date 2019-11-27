@@ -38,7 +38,7 @@ func (msg *Message) preClean(m *recive.Mail) {
 }
 
 func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
-	// Maybe multiple ticket informations in one mail
+	// Maybe multiple ticket information in one mail
 	count := 1
 	for {
 		// main info
@@ -59,9 +59,9 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 		}
 
 		if count == 1 && len(info) < 2 {
-			return errors.New("can't find informations, maybe the formate of body has changed!")
+			return errors.New("can't find information, maybe the format of body has changed")
 		}
-		// No more ticket informations
+		// No more ticket information
 		if count > 1 && len(info) < 2 {
 			break
 		}
@@ -71,11 +71,12 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 		}
 
 		msg.Subject = fmt.Sprintf("列车行程：%s", info[3])
-		if t, err := parseTime(info[2], "2006年01月02日15:04"); err != nil {
+		if t, err := ParseTime(info[2], "2006年01月02日15:04"); err != nil {
 			return err
 		} else {
 			msg.Events[0].StartDT = t + "Z"
 		}
+		// TODO: Find specific address automatically
 		msg.Events[0].Location = strings.Split(info[3], "-")[0]
 		msg.Events[0].Detail = fmt.Sprintf(
 			"订单号：%s\\n"+
@@ -94,7 +95,7 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 	return nil
 }
 
-func Pipline(m *recive.Mail, msg *Message, mc *chan Message) error {
+func Pipeline(m *recive.Mail, msg *Message, mc *chan Message) error {
 	msg.preClean(m)
 
 	switch msg.Subject {
@@ -109,7 +110,7 @@ func Pipline(m *recive.Mail, msg *Message, mc *chan Message) error {
 	return nil
 }
 
-func parseTime(t string, form string) (string, error) {
+func ParseTime(t string, form string) (string, error) {
 	t1, err := time.Parse(form, t)
 	if err != nil {
 		return "", err

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"mail2ics/clean"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Movie struct {
@@ -30,10 +32,10 @@ const (
 	REFERER = "https://movie.douban.com/cinema/later/chengdu/"
 )
 
-func MovieSchedule() {
+func MovieSchedule(mc *chan clean.Message) error {
 	resp, err := getHttpResponser(URL, REFERER)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	ch := make(chan Movie, 1)
@@ -45,12 +47,17 @@ func MovieSchedule() {
 			if err = parseMoviePages(&m); err != nil {
 				log.Fatal(err)
 			}
-			//done <- m
-			break
+			done <- m
 		}
 
 		close(done)
 	}()
+
+	if err = sendToMessage(&done, mc); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getHttpResponser(url, referer string) ([]byte, error) {
@@ -83,7 +90,7 @@ func getHttpResponser(url, referer string) ([]byte, error) {
 
 func parseMovieList(resp []byte, ch *chan Movie) {
 	r, _ := regexp.Compile(
-		`<a href="https://movie.douban.com/subject/([0-9]+)/".*?>(.*?)</a>[\s\S]*?` + // Movie id number
+		`<a href="https://movie.douban.com/subject/([0-9]+)/".*?>(.*?)</a>[\s\S]*?` + // Movie's id number and name
 			`<td class="">[\s\S]*?([0-9]+)人[\s\S]*?</td>`) // Want watch
 	for _, id := range r.FindAllStringSubmatch(string(resp), -1) {
 		var m Movie
@@ -115,7 +122,7 @@ func parseMoviePages(m *Movie) error {
 	getInfoA(infoStr, "编剧", `<a href.*?>(.*?)</a>`, &m.Author)
 	getInfoA(infoStr, "主演", `<a href.*?>(.*?)</a>`, &m.Casts)
 	getInfoB(infoStr, "类型:", `<span.*?>(.*?)</span>`, &m.Cate)
-	getInfoC(infoStr, "上映日期:", `(\d{4}-\d{2}-\d{2})\(中国大陆\)`, &m.Release)
+	getInfoC(infoStr, "上映日期:", `content="(.*?)\(中国大陆\)"`, &m.Release)
 	getInfoC(infoStr, "片长:", `>(\d+)分钟`, &m.Length)
 	getInfoD(infoStr, "制片国家/地区:", `(.*?)`, &m.Country)
 	getInfoD(infoStr, "语言:", `(.*?)`, &m.Language)
@@ -180,4 +187,39 @@ func getInfoC(infoStr, name, re string, filed *string) {
 func getInfoD(infoStr, name, re string, filed *string) {
 	r, _ := regexp.Compile(fmt.Sprintf(`<span class="pl">%s</span>([\s\S]*?)<br/>`, name))
 	*filed = r.FindStringSubmatch(infoStr)[1]
+}
+
+func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
+	var msg clean.Message
+	events := make([]clean.Event, 100)
+
+	msg.From = "brucegxs@gmail.com"
+	msg.Subject = fmt.Sprintf("%s 电影上映时间表更新", time.Now().Format("2006-01-02"))
+	msg.Cal = "电影时间表"
+	msg.Filename = "movie.ics"
+	msg.Events = events
+
+	index := 0
+	for m := range *done {
+		if err := formatEvent(&events[index], &m); err != nil {
+			return err
+		}
+		index++
+	}
+
+	return nil
+}
+
+func formatEvent(event *clean.Event, m *Movie) error {
+	event.Summary = m.Name
+	if strings.Count(m.Release, "-") == 1 {
+		m.Release += "-01"
+	}
+	if t, err := clean.ParseTime(m.Release, "2006-01-02"); err != nil {
+		return err
+	}
+
+	event.StartDT = m.Release
+
+	return nil
 }

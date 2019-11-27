@@ -43,7 +43,7 @@ func mail(messageChannel *chan clean.Message) {
 		log.Println("Handling: ", c.Subject)
 		var msg clean.Message
 
-		if err := clean.Pipline(&c, &msg, messageChannel); err != nil {
+		if err := clean.Pipeline(&c, &msg, messageChannel); err != nil {
 			log.Fatal(err)
 		}
 	}
