@@ -14,7 +14,7 @@ func main() {
 	messageChannel := make(chan clean.Message, 10)
 
 	go mail(&messageChannel)
-	go task.MovieSchedule(&messageChannel)
+	go movie(&messageChannel)
 
 	// Send email
 	for m := range messageChannel {
@@ -48,5 +48,15 @@ func mail(messageChannel *chan clean.Message) {
 		if err := clean.Pipeline(&c, &msg, messageChannel); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func movie(mc *chan clean.Message) {
+	for {
+		if err := task.MovieSchedule(mc); err != nil {
+			log.Fatal(err)
+		}
+
+		time.Sleep(time.Hour * 24 * 7)
 	}
 }

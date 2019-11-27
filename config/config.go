@@ -22,7 +22,7 @@ var (
 func init() {
 	a := make(map[string]Account)
 
-	data, err := readFile("config.json")
+	data, err := ReadFile("config.json")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func init() {
 	User = a["user"]
 }
 
-func readFile(filename string) ([]byte, error) {
+func ReadFile(filename string) ([]byte, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err

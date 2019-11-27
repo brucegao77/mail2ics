@@ -2,11 +2,13 @@ package task
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"mail2ics/clean"
+	"mail2ics/config"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -27,6 +29,7 @@ type Movie struct {
 	Length   string `json:"length"`
 	Summary  string `json:"summary"`
 	Want     string `json:"want"`
+	Url      string `json:"url"`
 }
 
 const (
@@ -34,47 +37,79 @@ const (
 	REFERER = "https://movie.douban.com/cinema/later/chengdu/"
 )
 
-func MovieSchedule(mc *chan clean.Message) {
-	for {
-		log.Println("Checking web for movie release info")
+func MovieSchedule(mc *chan clean.Message) error {
+	record := make(map[string]string)
+	if err := getRecord(&record); err != nil {
+		return err
+	}
 
-		resp, err := getHttpResponser(URL, REFERER)
-		if err != nil {
-			log.Fatal(err)
-		}
+	log.Println("Checking web for movie release info")
 
-		ch := make(chan Movie, 1)
-		go parseMovieList(resp, &ch)
+	resp, err := getHttpResponser(URL, REFERER)
+	if err != nil {
+		return err
+	}
 
-		done := make(chan Movie, 1)
-		go func() {
-			count := 0
-			for m := range ch {
-				count++
-				if count == 5 {
-					break
-				}
-				if err = parseMoviePages(&m); err != nil {
-					log.Fatal(err)
-				}
-				if strings.Count(m.Release, "-") != 2 {
-					continue
-				}
-				done <- m
+	ch := make(chan Movie, 1)
+	go parseMovieList(resp, &ch)
 
-				time.Sleep(time.Second * time.Duration(rand.Intn(3)+2))
+	done := make(chan Movie, 1)
+	go func() {
+		for m := range ch {
+			if err = parseMoviePages(&m); err != nil {
+				log.Fatal(err)
 			}
+			if strings.Count(m.Release, "-") != 2 {
+				continue
+			}
+			done <- m
 
-			close(done)
-		}()
-
-		if err = sendToMessage(&done, mc); err != nil {
-			log.Fatal(err)
+			time.Sleep(time.Second * time.Duration(rand.Intn(3)+2))
 		}
 
-		log.Println("Movie release check finished")
+		close(done)
+	}()
 
-		time.Sleep(time.Hour * 24 * 7)
+	if err = sendToMessage(&done, mc, &record); err != nil {
+		return err
+	}
+
+	if err := updateRecord(&record); err != nil {
+		return err
+	}
+	log.Println("Movie release check finished")
+
+	return nil
+}
+
+func getRecord(record *map[string]string) error {
+	data, err := config.ReadFile("record.json")
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(data, record)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return nil
+}
+
+func updateRecord(record *map[string]string) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	writeToFile("record.json", data)
+
+	return nil
+}
+
+func writeToFile(filename string, data []byte) {
+	err := ioutil.WriteFile(filename, data, 0644)
+	if err != nil {
+		log.Fatal("file write error: ", err)
 	}
 }
 
@@ -122,8 +157,8 @@ func parseMovieList(resp []byte, ch *chan Movie) {
 }
 
 func parseMoviePages(m *Movie) error {
-	page, err := getHttpResponser(
-		fmt.Sprintf("https://movie.douban.com/subject/%s/", m.Id), URL)
+	m.Url = fmt.Sprintf("https://movie.douban.com/subject/%s/", m.Id)
+	page, err := getHttpResponser(m.Url, URL)
 	if err != nil {
 		return err
 	}
@@ -263,7 +298,7 @@ func getInfoD(infoStr, name string, filed *string) error {
 	return nil
 }
 
-func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
+func sendToMessage(done *chan Movie, mc *chan clean.Message, r *map[string]string) error {
 	var msg clean.Message
 	events := make([]clean.Event, 100)
 
@@ -275,7 +310,7 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
 
 	index := 0
 	for m := range *done {
-		if err := eventAssignment(&events[index], &m); err != nil {
+		if err := eventAssignment(&events[index], &m, r); err != nil {
 			return err
 		}
 		index++
@@ -286,9 +321,31 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
 	return nil
 }
 
-func eventAssignment(event *clean.Event, m *Movie) error {
+func eventAssignment(event *clean.Event, m *Movie, r *map[string]string) error {
+	// Summary
 	event.Summary = fmt.Sprintf("%s, %s", m.Name, m.Want)
 	// start time and end time
+	if err := getStartAndEndDate(m, event); err != nil {
+		return err
+	}
+	// Uid
+	checkUid(m, event, r)
+	// Detail
+	event.Detail = fmt.Sprintf(
+		"导演: %s\\n"+
+			"编剧: %s\\n"+
+			"主演: %s\\n"+
+			"类型: %s\\n"+
+			"国家/地区: %s\\n"+
+			"语言: %s\\n"+
+			"片长: %s\\n"+
+			"剧情简介: %s\\n"+
+			"网址: %s", m.Director, m.Author, m.Casts, m.Cate, m.Country, m.Language, m.Length, m.Summary, m.Url)
+
+	return nil
+}
+
+func getStartAndEndDate(m *Movie, event *clean.Event) error {
 	if st, err := clean.ParseTime(m.Release, "2006-01-02", 8, "-"); err != nil {
 		return err
 	} else {
@@ -301,16 +358,15 @@ func eventAssignment(event *clean.Event, m *Movie) error {
 		event.StartDT = fmt.Sprintf(";VALUE=DATE:%s", strings.Split(st, "T")[0])
 	}
 
-	event.Uid = fmt.Sprintf("MV"+"%d", time.Now().Unix()+int64(rand.Intn(999999)))
-	event.Detail = fmt.Sprintf(
-		"导演: %s\\n"+
-			"编剧: %s\\n"+
-			"主演: %s\\n"+
-			"类型: %s\\n"+
-			"国家/地区: %s\\n"+
-			"语言: %s\\n"+
-			"片长: %s\\n"+
-			"剧情简介: %s", m.Director, m.Author, m.Casts, m.Cate, m.Country, m.Language, m.Length, m.Summary)
-
 	return nil
+}
+
+func checkUid(m *Movie, event *clean.Event, r *map[string]string) {
+	uid, ok := (*r)[m.Id]
+	if ok {
+		event.Uid = uid
+	} else {
+		event.Uid = fmt.Sprintf("MV"+"%d", time.Now().Unix()+int64(rand.Intn(999999)))
+		(*r)[m.Id] = event.Uid
+	}
 }
