@@ -323,7 +323,7 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message, r *map[string]strin
 
 func eventAssignment(event *clean.Event, m *Movie, r *map[string]string) error {
 	// Summary
-	event.Summary = fmt.Sprintf("%s, %s", m.Name, m.Want)
+	event.Summary = fmt.Sprintf("%s, %s人想看", m.Name, m.Want)
 	// start time and end time
 	if err := getStartAndEndDate(m, event); err != nil {
 		return err
