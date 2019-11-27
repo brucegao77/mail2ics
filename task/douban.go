@@ -346,7 +346,7 @@ func eventAssignment(event *clean.Event, m *Movie, r *map[string]string) error {
 }
 
 func getStartAndEndDate(m *Movie, event *clean.Event) error {
-	if st, err := clean.ParseTime(m.Release, "2006-01-02", 8, "-"); err != nil {
+	if st, err := clean.ParseTime(m.Release, "2006-01-02", 0, "-"); err != nil {
 		return err
 	} else {
 		if et, err := clean.ParseTime(st, clean.ICS_DT, 24, "+"); err != nil {
