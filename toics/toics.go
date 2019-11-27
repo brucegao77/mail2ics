@@ -30,14 +30,19 @@ func ToIcs(msg *clean.Message) error {
 
 func combineEvent(events *[]clean.Event, eventsStr *string) {
 	for _, e := range *events {
+		if e.Uid == "" {
+			continue
+		}
+
 		event := fmt.Sprintf(
 			"BEGIN:VEVENT\n"+
-				"DTSTART:%s\n"+
-				"UID:%s"+
+				"DTSTART%s\n"+
+				"DTEND%s\n"+
+				"UID:%s\n"+
 				"SUMMARY:%s\n"+
 				"DESCRIPTION:%s\n"+
 				"LOCATION:%s\n"+
-				"END:VEVENT\n", e.StartDT, e.Uid, e.Summary, e.Detail, e.Location)
+				"END:VEVENT\n", e.StartDT, e.EndDT, e.Uid, e.Summary, e.Detail, e.Location)
 
 		*eventsStr += event
 	}

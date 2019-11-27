@@ -1,11 +1,13 @@
 package task
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"mail2ics/clean"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strings"
@@ -32,32 +34,48 @@ const (
 	REFERER = "https://movie.douban.com/cinema/later/chengdu/"
 )
 
-func MovieSchedule(mc *chan clean.Message) error {
-	resp, err := getHttpResponser(URL, REFERER)
-	if err != nil {
-		return err
-	}
+func MovieSchedule(mc *chan clean.Message) {
+	for {
+		log.Println("Checking web for movie release info")
 
-	ch := make(chan Movie, 1)
-	go parseMovieList(resp, &ch)
-
-	done := make(chan Movie, 1)
-	go func() {
-		for m := range ch {
-			if err = parseMoviePages(&m); err != nil {
-				log.Fatal(err)
-			}
-			done <- m
+		resp, err := getHttpResponser(URL, REFERER)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		close(done)
-	}()
+		ch := make(chan Movie, 1)
+		go parseMovieList(resp, &ch)
 
-	if err = sendToMessage(&done, mc); err != nil {
-		return err
+		done := make(chan Movie, 1)
+		go func() {
+			count := 0
+			for m := range ch {
+				count++
+				if count == 5 {
+					break
+				}
+				if err = parseMoviePages(&m); err != nil {
+					log.Fatal(err)
+				}
+				if strings.Count(m.Release, "-") != 2 {
+					continue
+				}
+				done <- m
+
+				time.Sleep(time.Second * time.Duration(rand.Intn(3)+2))
+			}
+
+			close(done)
+		}()
+
+		if err = sendToMessage(&done, mc); err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println("Movie release check finished")
+
+		time.Sleep(time.Hour * 24 * 7)
 	}
-
-	return nil
 }
 
 func getHttpResponser(url, referer string) ([]byte, error) {
@@ -117,40 +135,74 @@ func parseMoviePages(m *Movie) error {
 	items := r.FindStringSubmatch(string(page))
 	infoStr := items[1] // Part of informations
 
-	getSummary(&items[2], &m.Summary)
-	getInfoA(infoStr, "导演", `<a href.*?>(.*?)</a>`, &m.Director)
-	getInfoA(infoStr, "编剧", `<a href.*?>(.*?)</a>`, &m.Author)
-	getInfoA(infoStr, "主演", `<a href.*?>(.*?)</a>`, &m.Casts)
-	getInfoB(infoStr, "类型:", `<span.*?>(.*?)</span>`, &m.Cate)
-	getInfoC(infoStr, "上映日期:", `content="(.*?)\(中国大陆\)"`, &m.Release)
-	getInfoC(infoStr, "片长:", `>(\d+)分钟`, &m.Length)
-	getInfoD(infoStr, "制片国家/地区:", `(.*?)`, &m.Country)
-	getInfoD(infoStr, "语言:", `(.*?)`, &m.Language)
-	//log.Println(m.Summary)
+	if err = getSummary(&items[2], &m.Summary); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'summary'", m.Name))
+	}
+	if err = getInfoA(infoStr, "导演", `<a href.*?>(.*?)</a>`, &m.Director); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'director'", m.Name))
+	}
+	if err = getInfoA(infoStr, "编剧", `<a href.*?>(.*?)</a>`, &m.Author); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'author'", m.Name))
+	}
+	if err = getInfoA(infoStr, "主演", `<a href.*?>(.*?)</a>`, &m.Casts); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'casts'", m.Name))
+	}
+	if err = getInfoB(infoStr, "类型:", `<span.*?>(.*?)</span>`, &m.Cate); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'category'", m.Name))
+	}
+	if err = getInfoC(infoStr, "上映日期:", `content="(.*?)\(中国大陆\)"`, &m.Release); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'release date'", m.Name))
+	}
+	if err = getInfoC(infoStr, "片长:", `>(\d+)分钟`, &m.Length); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'length'", m.Name))
+	}
+	if err = getInfoD(infoStr, "制片国家/地区:", &m.Country); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'country/region'", m.Name))
+	}
+	if err = getInfoD(infoStr, "语言:", &m.Language); err != nil {
+		log.Println(fmt.Sprintf("warning: %s has no info of 'language'", m.Name))
+	}
 
 	return nil
 }
 
-func getSummary(str, filed *string) {
-	var content string
+func getSummary(str, filed *string) error {
+	r1, _ := regexp.Compile(`<span property="v:summary" class="">([\s\S]*?)</span>`)
+	result1 := r1.FindStringSubmatch(*str)
+	r2, _ := regexp.Compile(`<span class="all hidden">([\s\S]*?)</span>`)
+	result2 := r2.FindStringSubmatch(*str)
 
-	r, _ := regexp.Compile(`<span property="v:summary" class="">([\s\S]*?)</span>`)
-	if items := r.FindStringSubmatch(*str); len(items) != 0 {
-		content = items[1]
-	} else {
-		r, _ := regexp.Compile(`<span class="all hidden">([\s\S]*?)</span>`)
-		content = r.FindStringSubmatch(*str)[1]
+	switch {
+	case len(result1) != 0:
+		*filed = result1[1]
+	case len(result2) != 0:
+		*filed = result2[1]
+	default:
+		return errors.New(fmt.Sprintf("can't found info of summary"))
 	}
 
-	strings.Replace(content, " ", "", -1)
-	strings.Replace(content, "<br />", "", -1)
-	*filed = content
+	removeString(filed, " ")
+	removeString(filed, "<br/>")
+	removeString(filed, "\n")
+
+	return nil
+}
+
+func removeString(str *string, remove string) {
+	b := []byte(*str)
+	re := regexp.MustCompile(remove)
+	*str = string(re.ReplaceAll(bytes.TrimSpace(b), []byte("")))
 }
 
 // 导演、编剧、主演
-func getInfoA(infoStr, name, re string, filed *string) {
+func getInfoA(infoStr, name, re string, filed *string) error {
+	var filedStr string
 	r, _ := regexp.Compile(fmt.Sprintf(`<span class='pl'>%s</span>([\s\S]*?)<br/>`, name))
-	filedStr := r.FindStringSubmatch(infoStr)[1]
+	if result := r.FindStringSubmatch(infoStr); len(result) != 0 {
+		filedStr = result[1]
+	} else {
+		return errors.New(fmt.Sprintf("can't found info of %s", name))
+	}
 
 	r, _ = regexp.Compile(re)
 	for n, i := range r.FindAllStringSubmatch(filedStr, -1) {
@@ -159,34 +211,56 @@ func getInfoA(infoStr, name, re string, filed *string) {
 			break
 		}
 	}
+
+	return nil
 }
 
 // 类型
-func getInfoB(infoStr, name, re string, filed *string) {
+func getInfoB(infoStr, name, re string, filed *string) error {
+	var filedStr string
 	r, _ := regexp.Compile(fmt.Sprintf(`<span class="pl">%s</span>([\s\S]*?)<br/>`, name))
-	filedStr := r.FindStringSubmatch(infoStr)[1]
+	if result := r.FindStringSubmatch(infoStr); len(result) != 0 {
+		filedStr = result[1]
+	} else {
+		return errors.New(fmt.Sprintf("can't found info of %s", name))
+	}
 
 	r, _ = regexp.Compile(re)
 	for _, i := range r.FindAllStringSubmatch(filedStr, -1) {
 		*filed += i[1] + "  "
 	}
+
+	return nil
 }
 
 // 上映日期、片长
-func getInfoC(infoStr, name, re string, filed *string) {
+func getInfoC(infoStr, name, re string, filed *string) error {
+	var filedStr string
 	r, _ := regexp.Compile(fmt.Sprintf(`<span class="pl">%s</span>([\s\S]*?)<br/>`, name))
-	filedStr := r.FindStringSubmatch(infoStr)[1]
+	if result := r.FindStringSubmatch(infoStr); len(result) != 0 {
+		filedStr = result[1]
+	} else {
+		return errors.New(fmt.Sprintf("can't found info of %s", name))
+	}
 
 	r, _ = regexp.Compile(re)
 	if items := r.FindStringSubmatch(filedStr); len(items) != 0 {
 		*filed = items[1]
 	}
+
+	return nil
 }
 
 // 制片国家、语言
-func getInfoD(infoStr, name, re string, filed *string) {
+func getInfoD(infoStr, name string, filed *string) error {
 	r, _ := regexp.Compile(fmt.Sprintf(`<span class="pl">%s</span>([\s\S]*?)<br/>`, name))
-	*filed = r.FindStringSubmatch(infoStr)[1]
+	if result := r.FindStringSubmatch(infoStr); len(result) != 0 {
+		*filed = result[1]
+	} else {
+		return errors.New(fmt.Sprintf("can't found info of %s", name))
+	}
+
+	return nil
 }
 
 func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
@@ -201,25 +275,42 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
 
 	index := 0
 	for m := range *done {
-		if err := formatEvent(&events[index], &m); err != nil {
+		if err := eventAssignment(&events[index], &m); err != nil {
 			return err
 		}
 		index++
 	}
 
+	*mc <- msg
+
 	return nil
 }
 
-func formatEvent(event *clean.Event, m *Movie) error {
-	event.Summary = m.Name
-	if strings.Count(m.Release, "-") == 1 {
-		m.Release += "-01"
-	}
-	if t, err := clean.ParseTime(m.Release, "2006-01-02"); err != nil {
+func eventAssignment(event *clean.Event, m *Movie) error {
+	event.Summary = fmt.Sprintf("%s, %s", m.Name, m.Want)
+	// start time and end time
+	if st, err := clean.ParseTime(m.Release, "2006-01-02", 8, "-"); err != nil {
 		return err
+	} else {
+		if et, err := clean.ParseTime(st, clean.ICS_DT, 24, "+"); err != nil {
+			return err
+		} else {
+			event.EndDT = fmt.Sprintf(";VALUE=DATE:%s", strings.Split(et, "T")[0])
+		}
+
+		event.StartDT = fmt.Sprintf(";VALUE=DATE:%s", strings.Split(st, "T")[0])
 	}
 
-	event.StartDT = m.Release
+	event.Uid = fmt.Sprintf("MV"+"%d", time.Now().Unix()+int64(rand.Intn(999999)))
+	event.Detail = fmt.Sprintf(
+		"导演: %s\\n"+
+			"编剧: %s\\n"+
+			"主演: %s\\n"+
+			"类型: %s\\n"+
+			"国家/地区: %s\\n"+
+			"语言: %s\\n"+
+			"片长: %s\\n"+
+			"剧情简介: %s", m.Director, m.Author, m.Casts, m.Cate, m.Country, m.Language, m.Length, m.Summary)
 
 	return nil
 }

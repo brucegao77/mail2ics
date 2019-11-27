@@ -6,6 +6,7 @@ import (
 	"mail2ics/clean"
 	"mail2ics/recive"
 	"mail2ics/send"
+	"mail2ics/task"
 	"time"
 )
 
@@ -13,6 +14,7 @@ func main() {
 	messageChannel := make(chan clean.Message, 10)
 
 	go mail(&messageChannel)
+	go task.MovieSchedule(&messageChannel)
 
 	// Send email
 	for m := range messageChannel {
@@ -47,5 +49,4 @@ func mail(messageChannel *chan clean.Message) {
 			log.Fatal(err)
 		}
 	}
-
 }

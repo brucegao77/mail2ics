@@ -20,6 +20,7 @@ type Message struct {
 
 type Event struct {
 	StartDT  string
+	EndDT    string
 	Summary  string
 	Location string
 	Detail   string
@@ -36,6 +37,8 @@ func (msg *Message) preClean(m *recive.Mail) {
 	msg.Cal = "行程"
 	msg.Events[0].Summary = m.Subject
 }
+
+const ICS_DT = "20060102T150405"
 
 func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 	// Maybe multiple ticket information in one mail
@@ -71,11 +74,19 @@ func (msg *Message) railWay(m *recive.Mail, mc *chan Message) error {
 		}
 
 		msg.Subject = fmt.Sprintf("列车行程：%s", info[3])
-		if t, err := ParseTime(info[2], "2006年01月02日15:04"); err != nil {
+		// start time and end time
+		if st, err := ParseTime(info[2], "2006年01月02日15:04", 8, "-"); err != nil {
 			return err
 		} else {
-			msg.Events[0].StartDT = t + "Z"
+			if et, err := ParseTime(st, ICS_DT, 1, "+"); err != nil {
+				return err
+			} else {
+				msg.Events[0].EndDT = fmt.Sprintf(":%s", et)
+			}
+
+			msg.Events[0].StartDT = fmt.Sprintf(":%s", st)
 		}
+
 		// TODO: Find specific address automatically
 		msg.Events[0].Location = strings.Split(info[3], "-")[0]
 		msg.Events[0].Detail = fmt.Sprintf(
@@ -110,15 +121,15 @@ func Pipeline(m *recive.Mail, msg *Message, mc *chan Message) error {
 	return nil
 }
 
-func ParseTime(t string, form string) (string, error) {
+func ParseTime(t string, form string, hourAdd int, method string) (string, error) {
 	t1, err := time.Parse(form, t)
 	if err != nil {
 		return "", err
 	}
 	// Don't know why, when add to google calendar, time will +8 hours
 	// so -8 hours here
-	h, _ := time.ParseDuration("-1h")
-	t2 := t1.Add(8 * h)
+	h, _ := time.ParseDuration(fmt.Sprintf("%s1h", method))
+	t2 := t1.Add(time.Duration(hourAdd) * h)
 
-	return t2.Format("20060102T150405"), err
+	return t2.Format(ICS_DT), err
 }
