@@ -52,11 +52,33 @@ func mail(messageChannel *chan clean.Message) {
 }
 
 func movie(mc *chan clean.Message) {
+	// test
+	fmt.Println(time.Now().Unix())
+	if err := task.MovieSchedule(mc); err != nil {
+		log.Fatal(err)
+	}
+
+	std := 1575507600
 	for {
+		time.Sleep(time.Minute)
+
+		if !everyThursday(int64(std)) {
+			continue
+		}
+
 		if err := task.MovieSchedule(mc); err != nil {
 			log.Fatal(err)
 		}
-
-		time.Sleep(time.Hour * 24 * 7)
+		// Prevent secondary send
+		time.Sleep(time.Hour)
 	}
+}
+
+func everyThursday(std int64) bool {
+	now := time.Now().Unix() + 28800
+	if (now-std)%604800 < 120 {
+		return true
+	}
+
+	return false
 }

@@ -126,8 +126,7 @@ func ParseTime(t string, form string, hourAdd int, method string) (string, error
 	if err != nil {
 		return "", err
 	}
-	// Don't know why, when add to google calendar, time will +8 hours
-	// so -8 hours here
+	// In docker container, time will +8 hours
 	h, _ := time.ParseDuration(fmt.Sprintf("%s1h", method))
 	t2 := t1.Add(time.Duration(hourAdd) * h)
 
