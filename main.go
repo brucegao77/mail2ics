@@ -52,12 +52,6 @@ func mail(messageChannel *chan clean.Message) {
 }
 
 func movie(mc *chan clean.Message) {
-	// test
-	fmt.Println(time.Now().Unix())
-	if err := task.MovieSchedule(mc); err != nil {
-		log.Fatal(err)
-	}
-
 	std := 1574902800
 	for {
 		time.Sleep(time.Minute)
