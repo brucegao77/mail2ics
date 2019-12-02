@@ -7,9 +7,6 @@ IMG="mail2ics"
 # container
 CONT="mail2ics"
 
-echo "Copying record.json >>>>>>>>>>>>>>>>>>>>>>>>>>>"
-docker cp ${CONT}:/root/mail2ics/record.json /root/mail2ics/
-
 echo "Updating project >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
 git pull
 

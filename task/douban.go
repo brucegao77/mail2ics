@@ -2,13 +2,11 @@ package task
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"mail2ics/clean"
-	"mail2ics/config"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -38,11 +36,6 @@ const (
 )
 
 func MovieSchedule(mc *chan clean.Message) error {
-	record := make(map[string]string)
-	if err := getRecord(&record); err != nil {
-		return err
-	}
-
 	log.Println("Checking web for movie release info")
 
 	resp, err := getHttpResponser(URL, REFERER)
@@ -70,47 +63,13 @@ func MovieSchedule(mc *chan clean.Message) error {
 		close(done)
 	}()
 
-	if err = sendToMessage(&done, mc, &record); err != nil {
+	if err = sendToMessage(&done, mc); err != nil {
 		return err
 	}
 
-	if err := updateRecord(&record); err != nil {
-		return err
-	}
 	log.Println("Movie release check finished")
 
 	return nil
-}
-
-func getRecord(record *map[string]string) error {
-	data, err := config.ReadFile("record.json")
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(data, record)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return nil
-}
-
-func updateRecord(record *map[string]string) error {
-	data, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	writeToFile("record.json", data)
-
-	return nil
-}
-
-func writeToFile(filename string, data []byte) {
-	err := ioutil.WriteFile(filename, data, 0644)
-	if err != nil {
-		log.Fatal("file write error: ", err)
-	}
 }
 
 func getHttpResponser(url, referer string) ([]byte, error) {
@@ -298,7 +257,7 @@ func getInfoD(infoStr, name string, filed *string) error {
 	return nil
 }
 
-func sendToMessage(done *chan Movie, mc *chan clean.Message, r *map[string]string) error {
+func sendToMessage(done *chan Movie, mc *chan clean.Message) error {
 	var msg clean.Message
 	events := make([]clean.Event, 100)
 
@@ -310,7 +269,7 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message, r *map[string]strin
 
 	index := 0
 	for m := range *done {
-		if err := eventAssignment(&events[index], &m, r); err != nil {
+		if err := eventAssignment(&events[index], &m); err != nil {
 			return err
 		}
 		index++
@@ -321,7 +280,7 @@ func sendToMessage(done *chan Movie, mc *chan clean.Message, r *map[string]strin
 	return nil
 }
 
-func eventAssignment(event *clean.Event, m *Movie, r *map[string]string) error {
+func eventAssignment(event *clean.Event, m *Movie) error {
 	// Summary
 	event.Summary = fmt.Sprintf("%s, %s人想看", m.Name, m.Want)
 	// start time and end time
@@ -329,7 +288,7 @@ func eventAssignment(event *clean.Event, m *Movie, r *map[string]string) error {
 		return err
 	}
 	// Uid
-	checkUid(m, event, r)
+	event.Uid = fmt.Sprintf("mvrelease"+"%s", m.Id)
 	// Detail
 	event.Detail = fmt.Sprintf(
 		"导演: %s\\n"+
@@ -359,14 +318,4 @@ func getStartAndEndDate(m *Movie, event *clean.Event) error {
 	}
 
 	return nil
-}
-
-func checkUid(m *Movie, event *clean.Event, r *map[string]string) {
-	uid, ok := (*r)[m.Id]
-	if ok {
-		event.Uid = uid
-	} else {
-		event.Uid = fmt.Sprintf("MV"+"%d", time.Now().Unix()+int64(rand.Intn(999999)))
-		(*r)[m.Id] = event.Uid
-	}
 }
