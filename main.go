@@ -58,7 +58,7 @@ func movie(mc *chan clean.Message) {
 		log.Fatal(err)
 	}
 
-	std := 1575507600
+	std := 1574902800
 	for {
 		time.Sleep(time.Minute)
 
